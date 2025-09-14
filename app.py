@@ -2,6 +2,8 @@ import streamlit as st
 import yt_dlp
 import os
 import re
+import requests
+import time
 
 def validate_url(url):
     """Validate if URL is from supported platforms"""
@@ -66,33 +68,34 @@ def download_video(url):
     is_instagram = 'instagram.com' in url.lower()
     
     if is_instagram:
-        # Instagram-specific configuration with enhanced mobile support
+        # Instagram-specific configuration with multiple strategies
         ydl_opts = {
             'outtmpl': f'{output_path}/%(title)s.%(ext)s',
-            'format': 'best[ext=mp4]/best',  # Prefer mp4 format
+            'format': 'best[ext=mp4]/best',
             'restrictfilenames': True,
             'no_warnings': False,
             'ignoreerrors': False,
-            'cookiefile': None,  # Don't use cookies to avoid login issues
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 11; SM-A515F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36 Instagram 239.0.0.10.109 Android (30/11; 420dpi; 1080x2220; samsung; SM-A515F; a51; exynos9611; en_US; 380204311)',
+                'Accept': '*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
                 'Accept-Encoding': 'gzip, deflate, br',
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-Instagram-AJAX': '1',
+                'X-CSRFToken': 'missing',
+                'Referer': 'https://www.instagram.com/',
+                'Origin': 'https://www.instagram.com',
             },
             'extractor_args': {
                 'instagram': {
                     'api_version': 'v1',
                 }
             },
-            # Add retry options for Instagram
-            'retries': 3,
-            'fragment_retries': 3,
+            'retries': 5,
+            'fragment_retries': 5,
+            'sleep_interval': 1,
+            'max_sleep_interval': 3,
         }
     else:
         # General configuration for other platforms
@@ -110,50 +113,80 @@ def download_video(url):
         # Show loading message
         with st.spinner('Video indiriliyor... Lütfen bekleyin.'):
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # For Instagram, try multiple approaches with better error handling
+                # For Instagram, try multiple approaches with enhanced strategies
                 if is_instagram:
                     success = False
                     last_error = None
                     
-                    # Attempt 1: Standard Instagram extractor
+                    # Strategy 1: Mobile Instagram app simulation
                     try:
+                        time.sleep(1)  # Rate limiting
                         info = ydl.extract_info(url, download=False)
                         video_title = info.get('title', 'Instagram Video')
                         ydl.download([url])
                         success = True
                     except Exception as e1:
                         last_error = e1
-                        st.info("İlk yöntem başarısız, alternatif yöntem deneniyor...")
+                        st.info("Mobil uygulama simülasyonu başarısız, web tarayıcı simülasyonu deneniyor...")
                     
-                    # Attempt 2: Different user agent and headers
+                    # Strategy 2: Web browser simulation with different headers
                     if not success:
                         try:
-                            ydl_opts_alt = ydl_opts.copy()
-                            ydl_opts_alt['http_headers']['User-Agent'] = 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36'
+                            ydl_opts_web = {
+                                'outtmpl': f'{output_path}/%(title)s.%(ext)s',
+                                'format': 'best[ext=mp4]/best',
+                                'restrictfilenames': True,
+                                'http_headers': {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                                    'Accept-Language': 'en-US,en;q=0.9,tr;q=0.8',
+                                    'Accept-Encoding': 'gzip, deflate, br',
+                                    'Connection': 'keep-alive',
+                                    'Upgrade-Insecure-Requests': '1',
+                                    'Sec-Fetch-Dest': 'document',
+                                    'Sec-Fetch-Mode': 'navigate',
+                                    'Sec-Fetch-Site': 'none',
+                                    'Sec-Fetch-User': '?1',
+                                    'Cache-Control': 'max-age=0',
+                                },
+                                'retries': 3,
+                                'sleep_interval': 2,
+                            }
                             
-                            with yt_dlp.YoutubeDL(ydl_opts_alt) as ydl2:
+                            with yt_dlp.YoutubeDL(ydl_opts_web) as ydl2:
+                                time.sleep(2)  # Additional delay
                                 info = ydl2.extract_info(url, download=False)
                                 video_title = info.get('title', 'Instagram Video')
                                 ydl2.download([url])
                                 success = True
                         except Exception as e2:
                             last_error = e2
-                            st.info("İkinci yöntem başarısız, üçüncü yöntem deneniyor...")
+                            st.info("Web tarayıcı simülasyonu başarısız, alternatif extractor deneniyor...")
                     
-                    # Attempt 3: Generic extractor as fallback
+                    # Strategy 3: Try with gallery-dl approach (generic extractor)
                     if not success:
                         try:
                             ydl_opts_generic = {
-                                'outtmpl': f'{output_path}/%(title)s.%(ext)s',
+                                'outtmpl': f'{output_path}/instagram_%(id)s.%(ext)s',
                                 'format': 'best',
                                 'restrictfilenames': True,
                                 'force_generic_extractor': True,
                                 'http_headers': {
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                                    'Accept': '*/*',
+                                    'Accept-Language': 'en-US,en;q=0.5',
+                                    'Accept-Encoding': 'gzip, deflate',
+                                    'Connection': 'keep-alive',
                                 },
+                                'extractor_args': {
+                                    'generic': {
+                                        'default_search': 'auto',
+                                    }
+                                }
                             }
                             
                             with yt_dlp.YoutubeDL(ydl_opts_generic) as ydl3:
+                                time.sleep(3)  # Longer delay for generic extractor
                                 info = ydl3.extract_info(url, download=False)
                                 video_title = info.get('title', 'Instagram Video')
                                 ydl3.download([url])
@@ -161,16 +194,41 @@ def download_video(url):
                         except Exception as e3:
                             last_error = e3
                     
+                    # Strategy 4: Last resort - try with minimal options
+                    if not success:
+                        try:
+                            ydl_opts_minimal = {
+                                'outtmpl': f'{output_path}/instagram_video.%(ext)s',
+                                'format': 'worst',  # Try worst quality as last resort
+                                'no_warnings': True,
+                                'ignoreerrors': True,
+                                'http_headers': {
+                                    'User-Agent': 'curl/7.68.0',
+                                },
+                            }
+                            
+                            with yt_dlp.YoutubeDL(ydl_opts_minimal) as ydl4:
+                                info = ydl4.extract_info(url, download=False)
+                                video_title = info.get('title', 'Instagram Video')
+                                ydl4.download([url])
+                                success = True
+                        except Exception as e4:
+                            last_error = e4
+                    
                     if not success:
                         error_msg = str(last_error)
                         if "private" in error_msg.lower():
                             st.error("❌ Bu Instagram videosu özel (private) hesapta olduğu için indirilemez.")
                         elif "login" in error_msg.lower() or "authentication" in error_msg.lower():
-                            st.error("❌ Bu Instagram videosu giriş gerektiriyor. Herkese açık videolar indirilebilir.")
+                            st.error("❌ Bu Instagram videosu giriş gerektiriyor veya hesap korumalı.")
+                            st.info("💡 Alternatif: Video linkini başka bir Instagram downloader sitesinde deneyin.")
                         elif "not found" in error_msg.lower() or "404" in error_msg:
                             st.error("❌ Video bulunamadı. Link doğru mu kontrol edin.")
+                        elif "rate limit" in error_msg.lower() or "too many requests" in error_msg.lower():
+                            st.error("❌ Instagram rate limit. Birkaç dakika bekleyip tekrar deneyin.")
                         else:
-                            st.error(f"❌ Instagram video indirilemedi: {error_msg}")
+                            st.error(f"❌ Instagram video indirilemedi. Instagram'ın güvenlik önlemleri nedeniyle bazı videolar indirilemeyebilir.")
+                            st.info("💡 Alternatif çözümler: Video sahibinden direkt paylaşım isteyin veya ekran kaydı alın.")
                         raise last_error
                 else:
                     # Standard approach for other platforms
