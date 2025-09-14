@@ -7,7 +7,7 @@ def validate_url(url):
     """Validate if URL is from supported platforms"""
     supported_patterns = [
         r'(https?://)?(www\.)?(instagram\.com|instagr\.am)/.+',  # Instagram
-        r'(https?://)?(www\.)?(tiktok\.com|vm\.tiktok\.com)/.+',  # TikTok
+        r'(https?://)?(www\.)?(tiktok\.com|vm\.tiktok\.com|vt\.tiktok\.com).*',  # TikTok
         r'(https?://)?(www\.)?(youtube\.com|youtu\.be)/.+',  # YouTube
         r'(https?://)?(www\.)?(twitter\.com|x\.com)/.+',  # Twitter/X
         r'(https?://)?(www\.)?(facebook\.com|fb\.watch)/.+',  # Facebook
@@ -15,8 +15,13 @@ def validate_url(url):
         r'(https?://)?(www\.)?(twitch\.tv)/.+',  # Twitch
     ]
     
-    for pattern in supported_patterns:
-        if re.match(pattern, url, re.IGNORECASE):
+    # Debug: show what URL we're checking
+    st.write(f"🔍 Debug - Checking URL: {url}")
+    
+    for i, pattern in enumerate(supported_patterns):
+        match = re.match(pattern, url, re.IGNORECASE)
+        st.write(f"Pattern {i+1}: {pattern} -> {'✅ Match' if match else '❌ No match'}")
+        if match:
             return True
     return False
 
@@ -119,7 +124,7 @@ def main():
     ensure_downloads_dir()
     
     # URL input interface
-    url = st.text_input("Video URL'sini buraya yapıştırın:", placeholder="Instagram, TikTok, YouTube, Twitter, Facebook linkini yapıştırın...")
+    url = st.text_input("Video URL'sini buraya yapıştırın:", placeholder="Instagram, TikTok (mobil linkler de desteklenir), YouTube, Twitter, Facebook...")
     
     col1, col2 = st.columns([3, 1])
     with col1:
